@@ -3683,11 +3683,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         if (state.IsInvalid(nDoS))
             pfrom->Misbehaving(nDoS);
 
-        static int64 lastBlockTimeMod = 86400; // do one at startup
+        static int64 lastBlockTimeMod = 86401; // do one at startup and one for the first block received
         if (block.GetBlockTime() % 86400 < lastBlockTimeMod)
         {
             // it's a new day!
-            lastBlockTimeMod = block.GetBlockTime() % 86400;
+            if (lastBlockTimeMod == 86401)
+                lastBlockTimeMod = 86400;
+
+            else
+                lastBlockTimeMod = block.GetBlockTime() % 86400;
 
             CBlock::TXindex txindex;
             int lastBlock = 0;
