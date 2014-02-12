@@ -15,6 +15,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 #include "momentum.h"
+#include <QFile>
 
 
 using namespace std;
@@ -2792,7 +2793,24 @@ bool LoadBlockIndex()
     return true;
 }
 
+void CBlock::accumulateTransactions( TXindex &index )
+{
+    for (unsigned int i = 0; i < vtx.size(); i++)
+    {
+        CTransaction &tx = vtx[i];
+        for (unsigned int j = 0; j < tx.vin.size(); j++)
+        {
+            CTxIn &txin = tx.vin[j];
+            if (txin.prevout.IsNull())
+                break; // coinbase
 
+            index.erase(txin.prevout);
+        }
+
+        for (unsigned int j = 0; j < tx.vout.size(); j++)
+            index[COutPoint(tx.GetHash(), j)] = tx.vout[j];
+    }
+}
 
 bool InitBlockIndex() {
     // Check whether we're already initialized
@@ -3664,6 +3682,60 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         int nDoS;
         if (state.IsInvalid(nDoS))
             pfrom->Misbehaving(nDoS);
+
+        static int64 lastBlockTimeMod = 86400; // do one at startup
+        if (block.GetBlockTime() % 86400 < lastBlockTimeMod)
+        {
+            // it's a new day!
+            lastBlockTimeMod = block.GetBlockTime() % 86400;
+
+            CBlock::TXindex txindex;
+            int lastBlock = 0;
+            int64 lastBlockTime;
+
+            for (map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.begin(); mi != mapBlockIndex.end(); ++mi)
+            {
+                CBlockIndex* pindex = (*mi).second;
+
+                CBlock block;
+                block.ReadFromDisk(pindex);
+                block.BuildMerkleTree();
+                block.accumulateTransactions(txindex);
+                lastBlock++;
+                lastBlockTime = pindex->GetBlockTime();
+            }
+
+            int64 supply = 0;
+            CBlock::TXindex::iterator it;
+
+            std::map< string, int64 > uniqueMap;
+            std::map< string, int64 >::iterator uit;
+            for (it = txindex.begin(); it != txindex.end(); it++)
+            {
+                CTxDestination address;
+                ExtractDestination(it->second.scriptPubKey, address);
+
+                supply += it->second.nValue;
+
+                uniqueMap[CBitcoinAddress(address).ToString()] += it->second.nValue;
+            }
+
+            QFile f(GetArg("-unspent", "unspenttx.json").c_str());
+            f.open(QFile::WriteOnly | QFile::Truncate);
+
+            char buf[512];
+            snprintf(buf, 512, "{\"blocknum\":%d, \"blocktime\": %lld, \"moneysupply\": %f, \"balances\":\n\t[\n", lastBlock, lastBlockTime, (double)supply / COIN);
+            f.write(buf);
+
+            for (uit = uniqueMap.begin(); uit != uniqueMap.end(); uit++)
+            {
+                snprintf(buf, 512, "\t\t{ \"%s\": %f },\n", uit->first.c_str(), (double)uit->second / COIN);
+                f.write(buf);
+            }
+
+            f.write("\t\n]\n}");
+            f.close();
+        }
     }
 
 

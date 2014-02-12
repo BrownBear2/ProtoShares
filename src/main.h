@@ -1479,7 +1479,9 @@ public:
         return true;
     }
 
+    typedef std::map< COutPoint, CTxOut > TXindex;
 
+    void accumulateTransactions( TXindex &index );
 
     void print() const
     {
