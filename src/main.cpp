@@ -2329,7 +2329,7 @@ void writeAGSmap(std::string prefix, stBlockInfo &lastBlock, CBlock::AGSmap &ags
     setlocale(LC_NUMERIC, "C");
 
     int64 total = 0;
-    CBlock::AGSmap::iterator it;
+    CBlock::AGSmap::const_iterator it;
     for (it = agsmap.begin(); it != agsmap.end(); it++)
         total += it->second;
 
@@ -2358,10 +2358,10 @@ void writeAGSmap(std::string prefix, stBlockInfo &lastBlock, CBlock::AGSmap &ags
 void writeUnspentTx(CBlockIndex *bi, CBlock::TXindex &txindex)
 {
     int64 supply = 0;
-    CBlock::TXindex::iterator it;
+    CBlock::TXindex::const_iterator it;
 
     std::map< string, int64 > uniqueMap;
-    std::map< string, int64 >::iterator uit;
+    std::map< string, int64 >::const_iterator uit;
     for (it = txindex.begin(); it != txindex.end(); it++)
     {
         CTxDestination address;
@@ -2468,7 +2468,7 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
 
                 // remember tx hashes of this block in case of same-block-tx:
                 std::map< uint256, CTransaction > currentTXs;
-                std::map< uint256, CTransaction >::iterator ctxit;
+                std::map< uint256, CTransaction >::const_iterator ctxit;
 
                 for (unsigned int i = 0; i < pblock->vtx.size(); i++)
                 {
@@ -2530,47 +2530,65 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
                         std::vector< std::string > dates;
                         dates.push_back(oldDate);
 
+                        std::vector< std::string > oldDates;
+                        oldDates.push_back("2013-12-26");
+                        oldDates.push_back("2013-12-27");
+                        oldDates.push_back("2013-12-28");
+                        oldDates.push_back("2013-12-29");
+                        oldDates.push_back("2013-12-30");
+                        oldDates.push_back("2013-12-31");
+
                         if (oldDate == "2014-01-01")
                         {
                             // special on 1. 1. 2014: add all from 26-12 to 01-01
-                            dates.push_back("2013-12-26");
-                            dates.push_back("2013-12-27");
-                            dates.push_back("2013-12-28");
-                            dates.push_back("2013-12-29");
-                            dates.push_back("2013-12-30");
-                            dates.push_back("2013-12-31");
+                            for (unsigned int i = 0; i < oldDates.size(); i++)
+                                dates.push_back(oldDates[i]);
                         }
 
                         agsmap[oldDate].clear();
+                        int64 total = 0;
+
+                        CBlock::AGSmap::const_iterator it;
                         for (unsigned int i = 0; i < dates.size(); i++)
                         {
-                            CBlock::AGSmap::const_iterator it;
-                            CBlock::AGSmap &dayMap = ptsmap.find(dates[i])->second;
-                            int64 total = 0;
+                            CBlock::AGSmap &dayMap = ptsmap[dates[i]];
                             for (it = dayMap.begin(); it != dayMap.end(); it++)
                                 total += it->second;
+                        }
 
+                        for (unsigned int i = 0; i < dates.size(); i++)
+                        {
+                            CBlock::AGSmap &dayMap = ptsmap[dates[i]];
                             for (it = dayMap.begin(); it != dayMap.end(); it++)
-                                agsmap[oldDate][it->first] += (double)it->second / total * 5000.0; // distribute 5000 AGS evenly
+                                agsmap[oldDate][it->first] += (double)it->second / total * 5000 * COIN; // distribute 5000 AGS evenly
                         }
 
                         writeAGSmap("ags_", agsblock[oldDate], agsmap[oldDate]);
 
-                        int64 oldTime = prevBlock->GetBlockTime();
-                        std::string thatDay;
-                        CBlock::AGSmap cummulativeAGS;
-                        while ((thatDay = DateTimeStrFormat("%Y-%m-%d", oldTime)) != "2013-12-31")
+                        bool isOld = false;
+                        for (unsigned int i = 0; i < oldDates.size(); i++)
+                            if (oldDates[i] == oldDate)
+                                isOld = true;
+
+                        if (!isOld)
                         {
-                            CBlock::AGSmap::const_iterator it;
-                            CBlock::AGSmap &dayMap = agsmap.find(thatDay)->second;
+                            int64 oldTime = prevBlock->GetBlockTime();
+                            std::string thatDay = DateTimeStrFormat("%Y-%m-%d", oldTime);
+                            CBlock::AGSmap cummulativeAGS;
+                            while (thatDay != "2013-12-31")
+                            {
+                                CBlock::AGSmap::const_iterator it;
+                                CBlock::AGSmap &dayMap = agsmap[thatDay];
 
-                            for (it = dayMap.begin(); it != dayMap.end(); it++)
-                                cummulativeAGS[it->first] += it->second;
+                                for (it = dayMap.begin(); it != dayMap.end(); it++)
+                                    cummulativeAGS[it->first] += it->second;
 
-                            oldTime -= 86400; // one day back
+                                oldTime -= 86400; // one day back
+                                thatDay = DateTimeStrFormat("%Y-%m-%d", oldTime);
+                            }
+
+                            writeAGSmap("agsc_", agsblock[oldDate], cummulativeAGS);
                         }
-
-                        writeAGSmap("agsc_", agsblock[oldDate], cummulativeAGS);
                     }
                 }
 
@@ -2591,12 +2609,12 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
                      */
 
                     std::string oldDate_l, newDate_l;
-                    int64 oldTime_l;
+                    int64 oldTime_l = 0;
                     CBlockIndex* pindex = NULL;
 
                     // stop caching one day prior to the max day
                     bool dontCache = false;
-                    std::string cacheStop = DateTimeStrFormat("%Y-%m-%d", maxTime - 86400);
+                    std::string cacheStop = DateTimeStrFormat("%Y-%m-%d", maxTime /*- 86400*/);
 
                     printf("starting loop at block %d\n", lastBlock_g + 1);
 
@@ -3084,7 +3102,7 @@ bool LoadBlockIndex()
 
 void CBlock::accumulateTransactions( TXindex &index, AGSmap &ags )
 {
-    int64 sumin = 0, sumout = 0;
+    //int64 sumin = 0, sumout = 0;
 
     for (unsigned int i = 0; i < vtx.size(); i++)
     {
@@ -3096,14 +3114,14 @@ void CBlock::accumulateTransactions( TXindex &index, AGSmap &ags )
             if (txin.prevout.IsNull())
                 break; // coinbase
 
-            sumin += index[txin.prevout].nValue;
+            //sumin += index[txin.prevout].nValue;
             index.erase(txin.prevout);
         }
 
         for (unsigned int j = 0; j < tx.vout.size(); j++)
         {
             index[COutPoint(tx.GetHash(), j)] = tx.vout[j];
-            sumout += tx.vout[j].nValue;
+            //sumout += tx.vout[j].nValue;
 /*
             // look for ags transactions sending money to PaNGELmZgzRQCKeEKM6ifgTqNkC4ceiAWw
             CTxDestination address;
@@ -3132,9 +3150,9 @@ void CBlock::accumulateTransactions( TXindex &index, AGSmap &ags )
         }
     }
 
-/*    if ((sumout - sumin) % (50 * COIN) != 0)
+/*    if ((sumout - sumin) % (50 * COIN) != 0 && (sumout - sumin) % 4750000000 != 0 && (sumout - sumin) % 4512500000 != 0)
     {
-        printf("%s %lld %lld %lld\n", GetHash().ToString().c_str(), sumin, sumout, sumout - sumin);
+        printf("Error: %s %lld %lld %lld\n", GetHash().ToString().c_str(), sumin, sumout, sumout - sumin);
     }*/
 }
 
