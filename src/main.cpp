@@ -2500,9 +2500,9 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
                         else
                             GetTransaction(txin.prevout.hash, tmpTx, agshash[newDate], true);
 
-                        CTxOut& txout = tx.vout[txin.prevout.n];
+                        CTxOut& txout = tmpTx.vout[txin.prevout.n];
                         ExtractDestination(txout.scriptPubKey, address);
-                        agsmap[newDate][CBitcoinAddress(address).ToString()] += tx.vout[j].nValue;
+                        agsmap[newDate][CBitcoinAddress(address).ToString()] += tmpTx.vout[j].nValue;
                     }
                 }
 
