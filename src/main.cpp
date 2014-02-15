@@ -2342,12 +2342,12 @@ void writeAGSmap(std::string prefix, stBlockInfo &lastBlock, CBlock::AGSmap &ags
         printf("error: cannot open file\n");
 
     char buf[512];
-    snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": %f, \"balances\":\n\t[\n", lastBlock.height, lastBlock.time, (double)total / COIN);
+    snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": %.8f, \"balances\":\n\t[\n", lastBlock.height, lastBlock.time, (double)total / COIN);
     f.write(buf);
 
     for (it = agsmap.begin(); it != agsmap.end(); it++)
     {
-        snprintf(buf, 512, "\t\t{ \"%s\": %f },\n", it->first.c_str(), (double)it->second / COIN );
+        snprintf(buf, 512, "\t\t{ \"%s\": %.8f },\n", it->first.c_str(), (double)it->second / COIN );
         f.write(buf);
     }
 
@@ -2383,12 +2383,12 @@ void writeUnspentTx(CBlockIndex *bi, CBlock::TXindex &txindex)
         printf("error: cannot open file\n");
 
     char buf[512];
-    snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": %f, \"balances\":\n\t[\n", bi->nHeight, bi->GetBlockTime(), (double)supply / COIN);
+    snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": %.8f, \"balances\":\n\t[\n", bi->nHeight, bi->GetBlockTime(), (double)supply / COIN);
     f.write(buf);
 
     for (uit = uniqueMap.begin(); uit != uniqueMap.end(); uit++)
     {
-        snprintf(buf, 512, "\t\t{ \"%s\": %f },\n", uit->first.c_str(), (double)uit->second / COIN);
+        snprintf(buf, 512, "\t\t{ \"%s\": %.8f },\n", uit->first.c_str(), (double)uit->second / COIN);
         f.write(buf);
     }
 
@@ -2560,7 +2560,7 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
                         {
                             CBlock::AGSmap &dayMap = ptsmap[dates[i]];
                             for (it = dayMap.begin(); it != dayMap.end(); it++)
-                                agsmap[oldDate][it->first] += (double)it->second / total * 5000 * COIN; // distribute 5000 AGS evenly
+                                agsmap[oldDate][it->first] += (double)it->second * ((double)(5000 * COIN) / total); // distribute 5000 AGS evenly
                         }
 
                         writeAGSmap("ags_", agsblock[oldDate], agsmap[oldDate]);
