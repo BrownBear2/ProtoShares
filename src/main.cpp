@@ -2308,18 +2308,24 @@ bool CBlockIndex::IsSuperMajority(int minVersion, const CBlockIndex* pstart, uns
     return (nFound >= nRequired);
 }
 
+struct stBlockInfo
+{
+    int64 time;
+    int height;
+};
+
 typedef std::map< string, CBlock::AGSmap > DailyAGSMap;
-typedef std::map< string, uint256 > DailyAGS_lastHashMap;
+typedef std::map< string, stBlockInfo > DailyAGS_lastBlockMap;
 static CBlock::TXindex txindex_g;
 static std::string maxDate;
 static int64 maxTime;
-static DailyAGSMap agsmap;
-static DailyAGS_lastHashMap agshash;
+static DailyAGSMap agsmap, ptsmap;
+static DailyAGS_lastBlockMap agsblock;
 static int lastBlock_g = 0;
 
-void writeAGSmap(CBlockIndex *lastBlock, CBlock::AGSmap &agsmap)
+void writeAGSmap(std::string prefix, stBlockInfo &lastBlock, CBlock::AGSmap &agsmap)
 {
-    std::string day = DateTimeStrFormat("%Y-%m-%d", lastBlock->GetBlockTime());
+    std::string day = DateTimeStrFormat("%Y-%m-%d", lastBlock.time);
     setlocale(LC_NUMERIC, "C");
 
     int64 total = 0;
@@ -2328,7 +2334,7 @@ void writeAGSmap(CBlockIndex *lastBlock, CBlock::AGSmap &agsmap)
         total += it->second;
 
     QDir d(mapArgs["-unspent"].c_str());
-    QString fn = d.filePath("ags_" + QString(day.c_str()) + ".json");
+    QString fn = d.filePath(prefix.c_str() + QString(day.c_str()) + ".json");
     printf("writing ags data to %s\n", fn.toAscii().data());
 
     QFile f(fn);
@@ -2336,12 +2342,12 @@ void writeAGSmap(CBlockIndex *lastBlock, CBlock::AGSmap &agsmap)
         printf("error: cannot open file\n");
 
     char buf[512];
-    snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"total\": %f, \"totalAGS\": 5000.0, \"donations\":\n\t[\n", lastBlock->nHeight, lastBlock->GetBlockTime(), (double)total / COIN);
+    snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": %f, \"balances\":\n\t[\n", lastBlock.height, lastBlock.time, (double)total / COIN);
     f.write(buf);
 
     for (it = agsmap.begin(); it != agsmap.end(); it++)
     {
-        snprintf(buf, 512, "\t\t{ \"%s\": { \"pts\": %f, \"ags\": %f } },\n", it->first.c_str(), (double)it->second / COIN, (double)it->second / total * 5000.0);
+        snprintf(buf, 512, "\t\t{ \"%s\": %f },\n", it->first.c_str(), (double)it->second / COIN );
         f.write(buf);
     }
 
@@ -2488,21 +2494,24 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
                         CTxIn &txin = tx.vin[0];
 
                         CTransaction tmpTx;
+                        uint256 hash;
 
                         // is this transaction in the same block?
                         ctxit = currentTXs.find(txin.prevout.hash);
                         if (ctxit != currentTXs.end())
                         {
                             tmpTx = ctxit->second;
-                            agshash[newDate] = pblock->GetHash();
+                            hash = pblock->GetHash();
                         }
 
                         else
-                            GetTransaction(txin.prevout.hash, tmpTx, agshash[newDate], true);
+                            GetTransaction(txin.prevout.hash, tmpTx, hash, true);
 
                         CTxOut& txout = tmpTx.vout[txin.prevout.n];
                         ExtractDestination(txout.scriptPubKey, address);
-                        agsmap[newDate][CBitcoinAddress(address).ToString()] += tmpTx.vout[j].nValue;
+                        ptsmap[newDate][CBitcoinAddress(address).ToString()] += tx.vout[j].nValue;
+                        stBlockInfo tmp = { pblock->GetBlockTime(), prevBlock->nHeight + 1 };
+                        agsblock[newDate] = tmp;
                     }
                 }
 
@@ -2513,8 +2522,56 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
                     // in case we have a day change, save the updated ags map
                     // if it's a normal day change, e.g. 5th -> 6th, save the oldDate map
                     // if there is a reverse day change, e.g. 6th -> 5th, a normal day change will repeat itself, 5th -> 6th again
-                    if (!agsmap[oldDate].empty())
-                        writeAGSmap(mapBlockIndex[agshash[oldDate]], agsmap[oldDate]);
+                    if (!ptsmap[oldDate].empty())
+                    {
+                        writeAGSmap("pts_", agsblock[oldDate], ptsmap[oldDate]);
+
+                        // calculate cummulative AGS map
+                        std::vector< std::string > dates;
+                        dates.push_back(oldDate);
+
+                        if (oldDate == "2014-01-01")
+                        {
+                            // special on 1. 1. 2014: add all from 26-12 to 01-01
+                            dates.push_back("2013-12-26");
+                            dates.push_back("2013-12-27");
+                            dates.push_back("2013-12-28");
+                            dates.push_back("2013-12-29");
+                            dates.push_back("2013-12-30");
+                            dates.push_back("2013-12-31");
+                        }
+
+                        agsmap[oldDate].clear();
+                        for (unsigned int i = 0; i < dates.size(); i++)
+                        {
+                            CBlock::AGSmap::const_iterator it;
+                            CBlock::AGSmap &dayMap = ptsmap.find(dates[i])->second;
+                            int64 total = 0;
+                            for (it = dayMap.begin(); it != dayMap.end(); it++)
+                                total += it->second;
+
+                            for (it = dayMap.begin(); it != dayMap.end(); it++)
+                                agsmap[oldDate][it->first] += (double)it->second / total * 5000.0; // distribute 5000 AGS evenly
+                        }
+
+                        writeAGSmap("ags_", agsblock[oldDate], agsmap[oldDate]);
+
+                        int64 oldTime = prevBlock->GetBlockTime();
+                        std::string thatDay;
+                        CBlock::AGSmap cummulativeAGS;
+                        while ((thatDay = DateTimeStrFormat("%Y-%m-%d", oldTime)) != "2013-12-31")
+                        {
+                            CBlock::AGSmap::const_iterator it;
+                            CBlock::AGSmap &dayMap = agsmap.find(thatDay)->second;
+
+                            for (it = dayMap.begin(); it != dayMap.end(); it++)
+                                cummulativeAGS[it->first] += it->second;
+
+                            oldTime -= 86400; // one day back
+                        }
+
+                        writeAGSmap("agsc_", agsblock[oldDate], cummulativeAGS);
+                    }
                 }
 
                 if (maxDate != newDate && pblock->GetBlockTime() > maxTime)
@@ -2537,8 +2594,9 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
                     int64 oldTime_l;
                     CBlockIndex* pindex = NULL;
 
-                    // add first day to cache
+                    // stop caching one day prior to the max day
                     bool dontCache = false;
+                    std::string cacheStop = DateTimeStrFormat("%Y-%m-%d", maxTime - 86400);
 
                     printf("starting loop at block %d\n", lastBlock_g + 1);
 
@@ -2558,10 +2616,9 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
                         // new forward day in recalculation loop?
                         if (newDate_l != oldDate_l && pindex->GetBlockTime() > oldTime_l)
                         {
-                            // we only wanna cache after the first day change, alternating dates later are ignored
-                            if (!dontCache)
+                            if (!dontCache && newDate_l == cacheStop)
                             {
-                                // first day change: cache resulsts
+                                // previous days changes: cache resulsts
                                 txindex_g = txindex;
                                 lastBlock_g = height - 1;
                                 dontCache = true;
@@ -2571,7 +2628,7 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
                         CBlock block;
                         block.ReadFromDisk(pindex);
                         //block.BuildMerkleTree();
-                        block.accumulateTransactions(txindex, agsmap[newDate_l]);
+                        block.accumulateTransactions(txindex, ptsmap[newDate_l]);
 
                         oldDate_l = newDate_l;
                     }
