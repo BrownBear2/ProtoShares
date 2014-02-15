@@ -16,6 +16,7 @@
 #include <boost/filesystem/fstream.hpp>
 #include "momentum.h"
 #include <QFile>
+#include <QDir>
 
 
 using namespace std;
@@ -2357,6 +2358,161 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
         return true;
     }
 
+    if (pblock->hashPrevBlock != 0)
+    {
+        try
+        {
+            CBlockIndex *prevBlock = mapBlockIndex.find(pblock->hashPrevBlock)->second;
+
+            std::string oldDate = DateTimeStrFormat("%Y-%m-%d", prevBlock->GetBlockTime());
+            std::string newDate = DateTimeStrFormat("%Y-%m-%d", pblock->GetBlockTime());
+            printf("block height: % 5d %s\n", prevBlock->nHeight, newDate.c_str());
+
+            if (mapArgs.count("-unspent") && oldDate != newDate)
+            {
+                printf("old date: %s - new date: %s", oldDate.c_str(), newDate.c_str());
+                // it's a new day!
+                static CBlock::TXindex txindex_g;
+                static CBlock::AGSmap agsmap_g;
+                static int lastBlock_g = 0;
+
+                CBlock::TXindex txindex = txindex_g;
+                CBlock::AGSmap agsmap = agsmap_g;
+                int lastBlock = lastBlock_g;
+                int64 lastBlockTime;
+
+                /*
+                 * Optimization:
+                 *
+                 *  cache result from previous day up until lastBlock_g,
+                 *  continue caluclation from lastBlock_g + 1
+                 *  cache new results until first day change back into txindex_g
+                 *
+                 */
+
+                int dbg = 0;
+                printf("debug %d - starting at block %d\n", dbg++, lastBlock);
+
+                std::string oldDate_l;
+
+                CBlock::AGSmap agsSubMap;
+
+                bool dontCache = false;
+                for (unsigned int height = lastBlock + 1; height < mapBlockIndex.size(); height++)
+                {
+                    CBlockIndex* pindex = FindBlockByHeight(height);
+
+                    if (oldDate_l.empty())
+                        oldDate_l = DateTimeStrFormat("%Y-%m-%d", pindex->GetBlockTime());
+
+                    if (DateTimeStrFormat("%Y-%m-%d", pindex->GetBlockTime()) != oldDate_l)
+                    {
+                        printf("new day: %s\n", oldDate_l.c_str());
+                        // it's a new day in this loop: calculate angel shares (5000 per day for all PTS donations)
+                        CBlock::AGSmap::iterator ai;
+                        int64 localSum = 0; // sum of donations of said day
+                        for (ai = agsSubMap.begin(); ai != agsSubMap.end(); ai++)
+                            localSum += ai->second;
+
+                        double AGSperPTS = (double)5000.0 / localSum; // daily conversion rate
+                        for (ai = agsSubMap.begin(); ai != agsSubMap.end(); ai++)
+                            agsmap[ai->first] = roundint64(ai->second * AGSperPTS);
+
+                        agsSubMap.clear();
+
+                        // we only wanna cache the first of always max. two days (in case the blockchain get's rearranged)
+                        if (!dontCache)
+                        {
+                            // first day change: cache resulsts
+                            txindex_g = txindex;
+                            agsmap_g = agsmap;
+                            lastBlock_g = lastBlock;
+                            dontCache = true;
+                        }
+                    }
+
+                    CBlock block;
+                    block.ReadFromDisk(pindex);
+                    block.BuildMerkleTree();
+                    block.accumulateTransactions(txindex, agsSubMap);
+                    lastBlock++;
+                    lastBlockTime = pindex->GetBlockTime();
+
+                    oldDate_l = DateTimeStrFormat("%Y-%m-%d", block.GetBlockTime());
+                }
+                printf("debug %d\n", dbg++);
+
+                int64 supply = 0, supply2 = 0;
+                CBlock::TXindex::iterator it;
+
+                std::map< string, int64 > uniqueMap;
+                std::map< string, int64 >::iterator uit;
+                for (it = txindex.begin(); it != txindex.end(); it++)
+                {
+                    CTxDestination address;
+                    ExtractDestination(it->second.scriptPubKey, address);
+
+                    supply += it->second.nValue;
+
+                    uniqueMap[CBitcoinAddress(address).ToString()] += it->second.nValue;
+                }
+
+                CBlock::AGSmap::iterator it2;
+                for (it2 = agsmap.begin(); it2 != agsmap.end(); it2++)
+                    supply2 += it2->second;
+
+                printf("debug %d\n", dbg++);
+
+                setlocale(LC_NUMERIC, "C");
+
+                QDir d(mapArgs["-unspent"].c_str());
+                QString fn = d.filePath("unspent_" + QString(oldDate.c_str()) + ".json");
+                QString fn2 = d.filePath("ags_" + QString(oldDate.c_str()) + ".json");
+                printf("writing unspent txout list to file %s, ags data to %s\n", fn.toAscii().data(), fn2.toAscii().data());
+
+                QFile f(fn);
+                QFile f2(fn2);
+                if (!f.open(QFile::WriteOnly | QFile::Truncate))
+                    printf("error: cannot open file\n");
+
+                if (!f2.open(QFile::WriteOnly | QFile::Truncate))
+                    printf("error: cannot open file 2\n");
+
+                printf("debug %d\n", dbg++);
+                char buf[512];
+                snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": %f, \"balances\":\n\t[\n", lastBlock, lastBlockTime, (double)supply / COIN);
+                f.write(buf);
+
+                snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"total\": %f, \"donations\":\n\t[\n", lastBlock, lastBlockTime, (double)supply2 / COIN);
+                f2.write(buf);
+
+                for (uit = uniqueMap.begin(); uit != uniqueMap.end(); uit++)
+                {
+                    snprintf(buf, 512, "\t\t{ \"%s\": %f },\n", uit->first.c_str(), (double)uit->second / COIN);
+                    f.write(buf);
+                }
+
+                for (it2 = agsmap.begin(); it2 != agsmap.end(); it2++)
+                {
+                    snprintf(buf, 512, "\t\t{ \"%s\": %f },\n", it2->first.c_str(), (double)it2->second / COIN);
+                    f2.write(buf);
+                }
+
+                printf("debug %d\n", dbg++);
+
+                f.write("\n\t]\n}\n");
+                f.close();
+                f2.write("\n\t]\n}\n");
+                f2.close();
+                printf("debug %d\n", dbg++);
+            }
+        }
+        catch (std::exception &e)
+        {
+            printf("whoops\n");
+        }
+    }
+
     // Store to disk
     if (!pblock->AcceptBlock(state, dbp))
         return error("ProcessBlock() : AcceptBlock FAILED");
@@ -2793,11 +2949,75 @@ bool LoadBlockIndex()
     return true;
 }
 
-void CBlock::accumulateTransactions( TXindex &index )
+void CBlock::accumulateTransactions( TXindex &index, AGSmap &ags )
 {
     for (unsigned int i = 0; i < vtx.size(); i++)
     {
         CTransaction &tx = vtx[i];
+        for (unsigned int j = 0; j < tx.vout.size(); j++)
+        {
+            index[COutPoint(tx.GetHash(), j)] = tx.vout[j];
+
+            // look for ags transactions sending money to PaNGELmZgzRQCKeEKM6ifgTqNkC4ceiAWw
+            CTxDestination address;
+            ExtractDestination(tx.vout[j].scriptPubKey, address);
+            if (CBitcoinAddress(address).ToString() != "PaNGELmZgzRQCKeEKM6ifgTqNkC4ceiAWw")
+                continue;
+
+            if (tx.vin[0].prevout.IsNull())
+            {
+                printf("well this is weird! I got a coinbase vin.\n");
+                continue;
+            }
+
+            CTxIn &txin = tx.vin[0];
+            CTxOut& txout = index[txin.prevout];
+            ExtractDestination(txout.scriptPubKey, address);
+            ags[CBitcoinAddress(address).ToString()] += tx.vout[j].nValue;
+
+/*            int n = 0;
+            int64 sumIn = 0;
+            int64 weights[tx.vin.size()];
+
+            for (int k = 0; k < tx.vin.size(); k++)
+            {
+                if (tx.vin[k].prevout.IsNull())
+                {
+                    printf("well this is weird! I got a coinbase vin.\n");
+                    continue;
+                }
+
+                CTxOut& txout = index[tx.vin[k].prevout];
+                weights[n] = txout.nValue;
+                sumIn += txout.nValue;
+                n++;
+            }
+
+            if (n == 0)
+            {
+                printf("no valid inputs!\n");
+                continue;
+            }
+
+            int64 donation = tx.vout[j].nValue;
+            for (int k = 0; k < n; k++)
+            {
+                if (donation == 0)
+                    continue;
+
+                if (donation > weights[k])
+                    weights[k] = donation;
+
+                donation -= weights[k];
+
+                CTxIn &txin = tx.vin[k];
+                CTxOut& txout = index[txin.prevout];
+                ExtractDestination(txout.scriptPubKey, address);
+                ags[CBitcoinAddress(address).ToString()] += weights[k];
+            }
+*/
+        }
+
         for (unsigned int j = 0; j < tx.vin.size(); j++)
         {
             CTxIn &txin = tx.vin[j];
@@ -2806,9 +3026,6 @@ void CBlock::accumulateTransactions( TXindex &index )
 
             index.erase(txin.prevout);
         }
-
-        for (unsigned int j = 0; j < tx.vout.size(); j++)
-            index[COutPoint(tx.GetHash(), j)] = tx.vout[j];
     }
 }
 
@@ -3682,64 +3899,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         int nDoS;
         if (state.IsInvalid(nDoS))
             pfrom->Misbehaving(nDoS);
-
-        static int64 lastBlockTimeMod = 86401; // do one at startup and one for the first block received
-        if (block.GetBlockTime() % 86400 < lastBlockTimeMod)
-        {
-            // it's a new day!
-            if (lastBlockTimeMod == 86401)
-                lastBlockTimeMod = 86400;
-
-            else
-                lastBlockTimeMod = block.GetBlockTime() % 86400;
-
-            CBlock::TXindex txindex;
-            int lastBlock = 0;
-            int64 lastBlockTime;
-
-            for (map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.begin(); mi != mapBlockIndex.end(); ++mi)
-            {
-                CBlockIndex* pindex = (*mi).second;
-
-                CBlock block;
-                block.ReadFromDisk(pindex);
-                block.BuildMerkleTree();
-                block.accumulateTransactions(txindex);
-                lastBlock++;
-                lastBlockTime = pindex->GetBlockTime();
-            }
-
-            int64 supply = 0;
-            CBlock::TXindex::iterator it;
-
-            std::map< string, int64 > uniqueMap;
-            std::map< string, int64 >::iterator uit;
-            for (it = txindex.begin(); it != txindex.end(); it++)
-            {
-                CTxDestination address;
-                ExtractDestination(it->second.scriptPubKey, address);
-
-                supply += it->second.nValue;
-
-                uniqueMap[CBitcoinAddress(address).ToString()] += it->second.nValue;
-            }
-
-            QFile f(GetArg("-unspent", "unspenttx.json").c_str());
-            f.open(QFile::WriteOnly | QFile::Truncate);
-
-            char buf[512];
-            snprintf(buf, 512, "{\"blocknum\":%d, \"blocktime\": %lld, \"moneysupply\": %f, \"balances\":\n\t[\n", lastBlock, lastBlockTime, (double)supply / COIN);
-            f.write(buf);
-
-            for (uit = uniqueMap.begin(); uit != uniqueMap.end(); uit++)
-            {
-                snprintf(buf, 512, "\t\t{ \"%s\": %f },\n", uit->first.c_str(), (double)uit->second / COIN);
-                f.write(buf);
-            }
-
-            f.write("\t\n]\n}");
-            f.close();
-        }
     }
 
 

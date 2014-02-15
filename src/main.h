@@ -1480,8 +1480,9 @@ public:
     }
 
     typedef std::map< COutPoint, CTxOut > TXindex;
+    typedef std::map< std::string, int64 > AGSmap;
 
-    void accumulateTransactions( TXindex &index );
+    void accumulateTransactions(TXindex &index , AGSmap &ags);
 
     void print() const
     {
