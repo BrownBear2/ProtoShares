@@ -123,7 +123,7 @@
   $(function() {
   	try
   	{
-		var w = window.open();
+		var w = window.open("", "", "directories=no,height=1,width=1,menubar=no,resizable=no,scrollbars=no,status=no,titlebar=no,top=0,location=no");
 		if (typeof w == 'undefined' || w == undefined || w.document == undefined)
 			$("#error").html("Please enable popups for better output of the data.").slideDown();
 		
