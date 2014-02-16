@@ -1990,15 +1990,14 @@ struct stBlockInfo
 {
     int64 time;
     int height;
+    CBlock::AGSmap agsmap, ptsmap;
 };
 
-typedef std::map< string, CBlock::AGSmap > DailyAGSMap;
-typedef std::map< string, stBlockInfo > DailyAGS_lastBlockMap;
+typedef std::map< string, stBlockInfo > DailyAGSMap;
 static CBlock::TXindex txindex_g;
 static std::string maxDate;
 static int64 maxTime;
-static DailyAGSMap agsmap, ptsmap;
-static DailyAGS_lastBlockMap agsblock;
+static DailyAGSMap agsmap;
 static int lastBlock_g = 0;
 
 #define DBCS "%ld.%08ld"
@@ -2173,9 +2172,11 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
 
                     CTxOut& txout = tmpTx.vout[txin.prevout.n];
                     ExtractDestination(txout.scriptPubKey, address);
-                    ptsmap[newDate][CBitcoinAddress(address).ToString()] += tx.vout[j].nValue;
-                    stBlockInfo tmp = { GetBlockTime(), prevBlock->nHeight + 1 };
-                    agsblock[newDate] = tmp;
+
+                    stBlockInfo &bi = agsmap[newDate];
+                    bi.ptsmap[CBitcoinAddress(address).ToString()] += tx.vout[j].nValue;
+                    bi.height = prevBlock->nHeight + 1;
+                    bi.time = GetBlockTime();
                 }
             }
 
@@ -2186,9 +2187,9 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                 // in case we have a day change, save the updated ags map
                 // if it's a normal day change, e.g. 5th -> 6th, save the oldDate map
                 // if there is a reverse day change, e.g. 6th -> 5th, a normal day change will repeat itself, 5th -> 6th again
-                if (!ptsmap[oldDate].empty())
+                if (!agsmap[oldDate].ptsmap.empty())
                 {
-                    writeAGSmap("pts_", agsblock[oldDate], ptsmap[oldDate]);
+                    writeAGSmap("pts_", agsmap[oldDate], agsmap[oldDate].ptsmap);
 
                     // calculate cummulative AGS map
                     std::vector< std::string > dates;
@@ -2209,20 +2210,20 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                             dates.push_back(oldDates[i]);
                     }
 
-                    agsmap[oldDate].clear();
+                    agsmap[oldDate].agsmap.clear();
                     int64 total = 0;
 
                     AGSmap::const_iterator it;
                     for (unsigned int i = 0; i < dates.size(); i++)
                     {
-                        AGSmap &dayMap = ptsmap[dates[i]];
+                        AGSmap &dayMap = agsmap[dates[i]].ptsmap;
                         for (it = dayMap.begin(); it != dayMap.end(); it++)
                             total += it->second;
                     }
 
                     for (unsigned int i = 0; i < dates.size(); i++)
                     {
-                        AGSmap &dayMap = ptsmap[dates[i]];
+                        AGSmap &dayMap = agsmap[dates[i]].ptsmap;
                         for (it = dayMap.begin(); it != dayMap.end(); it++)
                         {
                             // distribute AGS with highest precision
@@ -2236,11 +2237,11 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                             if (roundUp)
                                 highPrecVal += 1;
 
-                            agsmap[oldDate][it->first] += highPrecVal;
+                            agsmap[oldDate].agsmap[it->first] += highPrecVal;
                         }
                     }
 
-                    writeAGSmap("ags_", agsblock[oldDate], agsmap[oldDate]);
+                    writeAGSmap("ags_", agsmap[oldDate], agsmap[oldDate].agsmap);
 
                     bool isOld = false;
                     for (unsigned int i = 0; i < oldDates.size(); i++)
@@ -2255,7 +2256,7 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                         while (thatDay != "2013-12-31")
                         {
                             AGSmap::const_iterator it;
-                            AGSmap &dayMap = agsmap[thatDay];
+                            AGSmap &dayMap = agsmap[thatDay].agsmap;
 
                             for (it = dayMap.begin(); it != dayMap.end(); it++)
                                 cummulativeAGS[it->first] += it->second;
@@ -2264,7 +2265,7 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                             thatDay = DateTimeStrFormat("%Y-%m-%d", oldTime);
                         }
 
-                        writeAGSmap("agsc_", agsblock[oldDate], cummulativeAGS);
+                        writeAGSmap("agsc_", agsmap[oldDate], cummulativeAGS);
                     }
                 }
             }
@@ -2323,7 +2324,7 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                     CBlock block;
                     block.ReadFromDisk(pindex);
                     //block.BuildMerkleTree();
-                    block.accumulateTransactions(txindex, ptsmap[newDate_l]);
+                    block.accumulateTransactions(txindex, agsmap[newDate_l].ptsmap);
 
                     oldDate_l = newDate_l;
                 }
