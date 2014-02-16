@@ -124,7 +124,7 @@
   	try
   	{
 		var w = window.open();
-		if (typeof w == 'undefined' || w == undefined || !w.test)
+		if (typeof w == 'undefined' || w == undefined || w.document == undefined)
 			$("#error").html("Please enable popups for better output of the data.").slideDown();
 		
 		else
