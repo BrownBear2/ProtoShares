@@ -47,6 +47,29 @@
   		color: #777777;
   	}
   	
+  	#error
+  	{
+  		display: inline-block;
+  		width: 400px;
+  		font-size: 14px;
+  		border: 2px #cc0000 dashed;
+  		padding: 10px;
+  		display: none;
+  		background-color: #ffffcc;
+  		position: fixed;
+  		left: 30%;
+  	}
+  	
+  	.noselect
+  	{
+  		-webkit-touch-callout: none;
+		-webkit-user-select: none;
+		-khtml-user-select: none;
+		-moz-user-select: none;
+		-ms-user-select: none;
+		user-select: none;
+  	}
+  	
   	.don 
   	{
   		color: #777777;
@@ -57,6 +80,7 @@
   		width: 100%;
   		left: 0px;
   		padding-bottom: 20px;
+  		background-color: #ffffff;
   	}
   </style>
   <script>
@@ -97,6 +121,19 @@
   </script>
   <script>
   $(function() {
+  	try
+  	{
+		var w = window.open();
+		if (typeof w == 'undefined' || w == undefined || !w.test)
+			$("#error").html("Please enable popups for better output of the data.").slideDown();
+		
+		else
+			w.close();
+	}
+	catch (e)
+	{
+	}
+  
     $( "#slider_pts" ).slider({ min: 0, max: 100, value: 10, slide: function ( event, ui )
     	{
     		$("#amount_pts").val( ui.value );
@@ -204,10 +241,18 @@
 				
 				try
 				{
-					var w = window.open();
-					
 					var cont = "<pre>" + JSON.stringify({ "moneysupply": grandTotal, "balances": resorted }, null, 4) + "</pre>";
-					w.document.write(cont);
+
+					var w = window.open();
+					if (typeof w == 'undefined' || w == undefined || !w.test)
+					{
+						$("#step1").fadeOut();
+						$("#step2").html(cont).fadeIn();
+						$(".don").attr("class", "don noselect");
+					}						
+						
+					else
+						w.document.write(cont);
 				}
 				catch (e)
 				{
@@ -222,6 +267,7 @@
   </script>
 </head>
 <body>
+	<div id="error" class="noselect"></div>
 	<div id="step1">
 		<h1>Get data for BTS genesis block:</h1>
 		<table>
