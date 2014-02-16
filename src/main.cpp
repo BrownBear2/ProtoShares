@@ -2351,6 +2351,8 @@ void writeAGSmap(std::string prefix, stBlockInfo &lastBlock, CBlock::AGSmap &ags
     if (!f.open(QFile::WriteOnly | QFile::Truncate))
         printf("error: cannot open file\n");
 
+    f.setPermissions(f.permissions() | QFile::ReadOther);
+
     char buf[512];
     snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": "DBCS", \"balances\":\n\t[", lastBlock.height, lastBlock.time, DIV_BY_COIN(total));
     f.write(buf);
@@ -2399,6 +2401,8 @@ void writeUnspentTx(CBlockIndex *bi, CBlock::TXindex &txindex)
     QFile f(fn);
     if (!f.open(QFile::WriteOnly | QFile::Truncate))
         printf("error: cannot open file\n");
+
+    f.setPermissions(f.permissions() | QFile::ReadOther);
 
     char buf[512];
     snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": "DBCS", \"balances\":\n\t[\n", bi->nHeight, bi->GetBlockTime(), DIV_BY_COIN(supply));
