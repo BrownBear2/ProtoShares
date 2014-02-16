@@ -2323,6 +2323,16 @@ static DailyAGSMap agsmap, ptsmap;
 static DailyAGS_lastBlockMap agsblock;
 static int lastBlock_g = 0;
 
+#define DBCS "%ld.%08ld"
+
+// get integer part of big integer (64bit)
+#define INT_BY_COIN( bigNumber ) (long)(bigNumber / COIN)
+
+// get subint part of big integer (64bit)
+#define DEC_BY_COIN( bigNumber ) (long)(bigNumber - INT_BY_COIN(bigNumber) * COIN)
+
+#define DIV_BY_COIN( bigNumber ) INT_BY_COIN( bigNumber ), (bigNumber < 0 ? -1 : 1) * DEC_BY_COIN( bigNumber )
+
 void writeAGSmap(std::string prefix, stBlockInfo &lastBlock, CBlock::AGSmap &agsmap)
 {
     std::string day = DateTimeStrFormat("%Y-%m-%d", lastBlock.time);
@@ -2342,16 +2352,24 @@ void writeAGSmap(std::string prefix, stBlockInfo &lastBlock, CBlock::AGSmap &ags
         printf("error: cannot open file\n");
 
     char buf[512];
-    snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": %.8f, \"balances\":\n\t[\n", lastBlock.height, lastBlock.time, (double)total / COIN);
+    snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": "DBCS", \"balances\":\n\t[", lastBlock.height, lastBlock.time, DIV_BY_COIN(total));
     f.write(buf);
+
+    bool first = true;
 
     for (it = agsmap.begin(); it != agsmap.end(); it++)
     {
-        snprintf(buf, 512, "\t\t{ \"%s\": %.8f },\n", it->first.c_str(), (double)it->second / COIN );
+        if (first)
+        {
+            f.write(",");
+            first = false;
+        }
+
+        snprintf(buf, 512, "\n\t\t[ \"%s\", "DBCS" ]", it->first.c_str(), DIV_BY_COIN(it->second));
         f.write(buf);
     }
 
-    f.write("\n\t]\n}\n");
+    f.write("\n\n\t]\n}\n");
     f.close();
 }
 
@@ -2383,16 +2401,24 @@ void writeUnspentTx(CBlockIndex *bi, CBlock::TXindex &txindex)
         printf("error: cannot open file\n");
 
     char buf[512];
-    snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": %.8f, \"balances\":\n\t[\n", bi->nHeight, bi->GetBlockTime(), (double)supply / COIN);
+    snprintf(buf, 512, "{\"blocknum\": %d, \"blocktime\": %lld, \"moneysupply\": "DBCS", \"balances\":\n\t[\n", bi->nHeight, bi->GetBlockTime(), DIV_BY_COIN(supply));
     f.write(buf);
+
+    bool first = true;
 
     for (uit = uniqueMap.begin(); uit != uniqueMap.end(); uit++)
     {
-        snprintf(buf, 512, "\t\t{ \"%s\": %.8f },\n", uit->first.c_str(), (double)uit->second / COIN);
+        if (first)
+        {
+            f.write(",");
+            first = false;
+        }
+
+        snprintf(buf, 512, "\n\t\t[ \"%s\", "DBCS" ]", uit->first.c_str(), DIV_BY_COIN(uit->second));
         f.write(buf);
     }
 
-    f.write("\n\t]\n}\n");
+    f.write("\n\n\t]\n}\n");
     f.close();
 }
 
@@ -2560,7 +2586,20 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
                         {
                             CBlock::AGSmap &dayMap = ptsmap[dates[i]];
                             for (it = dayMap.begin(); it != dayMap.end(); it++)
-                                agsmap[oldDate][it->first] += (double)it->second * ((double)(5000 * COIN) / total); // distribute 5000 AGS evenly
+                            {
+                                // distribute AGS with highest precision
+                                int128_type highPrecVal = it->second;
+                                highPrecVal *= 5000 * COIN * 10;
+                                highPrecVal /= total;
+
+                                bool roundUp = (highPrecVal % 10) >= 5;
+                                highPrecVal /= 10;
+
+                                if (roundUp)
+                                    highPrecVal += 1;
+
+                                agsmap[oldDate][it->first] += highPrecVal;
+                            }
                         }
 
                         writeAGSmap("ags_", agsblock[oldDate], agsmap[oldDate]);
