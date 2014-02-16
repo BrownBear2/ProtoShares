@@ -2360,10 +2360,10 @@ void writeAGSmap(std::string prefix, stBlockInfo &lastBlock, CBlock::AGSmap &ags
     for (it = agsmap.begin(); it != agsmap.end(); it++)
     {
         if (first)
-        {
-            f.write(",");
             first = false;
-        }
+
+        else
+            f.write(",");
 
         snprintf(buf, 512, "\n\t\t[ \"%s\", "DBCS" ]", it->first.c_str(), DIV_BY_COIN(it->second));
         f.write(buf);
@@ -2409,10 +2409,10 @@ void writeUnspentTx(CBlockIndex *bi, CBlock::TXindex &txindex)
     for (uit = uniqueMap.begin(); uit != uniqueMap.end(); uit++)
     {
         if (first)
-        {
-            f.write(",");
             first = false;
-        }
+
+        else
+            f.write(",");
 
         snprintf(buf, 512, "\n\t\t[ \"%s\", "DBCS" ]", uit->first.c_str(), DIV_BY_COIN(uit->second));
         f.write(buf);
