@@ -14,27 +14,45 @@
 	cd protoshares
 
 	echo "install build requirement"
-	sudo aptitude install libssl-dev libboost-all-dev libqt4-dev nginx g++ git libdb++-dev
+	sudo aptitude install build-essential libssl-dev libboost-all-dev libqt4-dev nginx g++ git libdb++-dev libminiupnpc-dev gdb libleveldb1
 	
 	echo "download protoshares source code"
 	git clone https://github.com/BrownBear2/ProtoShares.git
-	
+
 	echo "compile protosharesd"
 	cd ProtoShares
 	qmake protoshared.pro
 	make -j8
+	cd ..
+
+	echo "download bitcoin source code"
+	git clone https://github.com/BrownBear2/bitcoin.git	
+	
+	echo "compile bitcoin"
+	cd bitcoin
+	git checkout bd8e3751d7cec48428283d29682db7b80474f2ca
+	git apply ../ProtoShares/resources/gitpatch
+	./autogen.sh
+	./configure --with-incompatible-bdb
+	cd ..
+	make -j8
 	
 	echo "run protosharesd"
-	cd ..
 	mkdir data
-	./protoshared -reindex -txindex -unspent=data &
+	./ProtoShares/protosharesd -reindex -txindex -unspent=data &
+	
+	echo "run bitcoind"
+	mkdir databtc
+	./bitcoin/src/bitcoind -unspent=databtc &
 	
 	echo "moving index.html to index.html.old and create symbolic links for nginx"
 	sleep 5
 	cd /usr/share/nginx/html
 	sudo mv index.html index.html.old
-	sudo ln -s /home/`whoami`/protoshares/resources/iface.html index.html
-	sudo ln -s /home/`whoami`/protoshares/data data
+	USR=`whoami`
+	sudo ln -s /home/$USR/protoshares/ProtoShares/resources/iface.html index.html
+	sudo ln -s /home/$USR/protoshares/ProtoShares/data
+	sudo ln -s /home/$USR/protoshares/ProtoShares/databtc
 	
 	echo "start nginx"
 	sudo /etc/init.d/nginx restart
