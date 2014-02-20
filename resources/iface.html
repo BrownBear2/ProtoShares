@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -8,111 +9,152 @@
   <script src="http://code.jquery.com/ui/1.10.4/jquery-ui.js"></script>
   <style>
   
-  	body
-  	{
-  		padding: 20px;
-  	}
+    body
+    {
+	padding: 20px;
+    }
   
-  	input[type="text"]
-  	{
-  		text-align: right;
-  	 	border: 1px #cccccc solid;
-  		padding-right: 2px;
-	}
-	
-  	td,div,p,body
-  	{
-  		font-family: verdana, arial, sans;
-  		font-size: 12px;
-  	}
-  	
-  	#div2 
-  	{
-  		display: none;
-  	}
-  	
-  	#showags, #showpts, #showagsc, #showagsr 
-  	{
-  		color: #990000;
-  	}
-  	
-  	#showags.dont, #showpts.dont, #showagsc.dont, #showagsr.dont
-  	{
-  		cursor: not-allowed;
-  		color: black;
-  	}
-  	
-  	.don a
-  	{
-  		color: #777777;
-  	}
-  	
-  	#error
-  	{
-  		display: inline-block;
-  		width: 400px;
-  		font-size: 14px;
-  		border: 2px #cc0000 dashed;
-  		padding: 10px;
-  		display: none;
-  		background-color: #ffffcc;
-  		position: fixed;
-  		left: 30%;
-  	}
-  	
-  	.noselect
-  	{
-  		-webkit-touch-callout: none;
-		-webkit-user-select: none;
-		-khtml-user-select: none;
-		-moz-user-select: none;
-		-ms-user-select: none;
-		user-select: none;
-  	}
-  	
-  	.don 
-  	{
-  		color: #777777;
-  		font-size: 10px;
-  		text-align: center;
-  		position: fixed; 
-  		bottom: 0px;
-  		width: 100%;
-  		left: 0px;
-  		padding-bottom: 20px;
-  		background-color: #ffffff;
-  	}
+    input[type="text"]
+    {
+	text-align: right;
+        border: 1px #cccccc solid;
+	padding-right: 2px;
+    }
+    
+    td,div,p,body
+    {
+	font-family: verdana, arial, sans;
+	font-size: 12px;
+    }
+    
+    #div2 
+    {
+	display: none;
+    }
+    
+    .link, .dont
+    {
+	color: #990000;
+    }
+    
+    .dont
+    {
+	cursor: not-allowed;
+	color: black;
+    }
+    
+    .don a
+    {
+	color: #777777;
+    }
+    
+    #error
+    {
+	display: inline-block;
+	width: 400px;
+	font-size: 14px;
+	border: 2px #cc0000 dashed;
+	padding: 10px;
+	display: none;
+	background-color: #ffffcc;
+	position: fixed;
+	left: 30%;
+    }
+    
+    .noselect
+    {
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	-khtml-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+    }
+    
+    .don 
+    {
+	color: #777777;
+	font-size: 10px;
+	text-align: center;
+	position: fixed; 
+	bottom: 0px;
+	width: 100%;
+	left: 0px;
+	padding-bottom: 20px;
+	background-color: #ffffff;
+    }
   </style>
   <script>
-  	function upDate() // pun intended
-  	{
-  		var date = $("#date").val();
-    	$("#showpts").attr("href", "data/unspent_" + date + ".json");
-    	
-    	if (date.substr(0, 4) == "2013")
-    	{
-			$("#showags").removeAttr("href");
-			$("#showags").attr("class", "dont");
+    function upDate() // pun intended
+    {
+	var date = $("#date").val();
+	$("#showpts").attr("href", "data/unspent_" + date + ".json");
+	
+	if (date.substr(0, 4) == "2013")
+	{
+	    if (date != "2013-12-31" &&
+	        date != "2013-12-30" &&
+	        date != "2013-12-29" &&
+	        date != "2013-12-28" &&
+	        date != "2013-12-27" &&
+	        date != "2013-12-26")
+	    {
+		$("#showags").removeAttr("href");
+		$("#showags").attr("class", "dont");
 
-			$("#showagsc").removeAttr("href");
-			$("#showagsc").attr("class", "dont");
+		$("#showagsr").removeAttr("href");
+		$("#showagsr").attr("class", "dont");
 
-			$("#showagsr").removeAttr("href");
-			$("#showagsr").attr("class", "dont");
-		}
+		$("#showags_btc").removeAttr("href");
+		$("#showags_btc").attr("class", "dont");
 
-		else    		
-		{
-	    	$("#showags").attr("href", "data/pts_" + date + ".json");
-			$("#showags").attr("class", "");
+		$("#showagsr_btc").removeAttr("href");
+		$("#showagsr_btc").attr("class", "dont");
+	    }
 
-    		$("#showagsc").attr("href", "data/agsc_" + date + ".json");
-			$("#showagsc").attr("class", "");
+	    else
+	    {
+		$("#showags").attr("href", "data/pts_" + date + ".json");
+		$("#showags").attr("class", "link");
 
-    		$("#showagsr").attr("href", "data/ags_" + date + ".json");
-			$("#showagsr").attr("class", "");
-    	}
-  	}
+		$("#showagsr").attr("href", "data/ags_" + date + ".json");
+		$("#showagsr").attr("class", "link");
+
+		$("#showags_btc").attr("href", "databtc/pts_" + date + ".json");
+		$("#showags_btc").attr("class", "link");
+
+		$("#showagsr_btc").attr("href", "databtc/ags_" + date + ".json");
+		$("#showagsr_btc").attr("class", "link");
+	    }
+
+	    $("#showagsc").removeAttr("href");
+	    $("#showagsc").attr("class", "dont");
+
+	    $("#showagsc_btc").removeAttr("href");
+	    $("#showagsc_btc").attr("class", "dont");
+	}
+
+	else
+	{
+	    $("#showags").attr("href", "data/pts_" + date + ".json");
+	    $("#showags").attr("class", "link");
+
+	    $("#showagsr").attr("href", "data/ags_" + date + ".json");
+	    $("#showagsr").attr("class", "link");
+
+	    $("#showags_btc").attr("href", "databtc/pts_" + date + ".json");
+	    $("#showags_btc").attr("class", "link");
+
+	    $("#showagsr_btc").attr("href", "databtc/ags_" + date + ".json");
+	    $("#showagsr_btc").attr("class", "link");
+
+	    $("#showagsc").attr("href", "data/agsc_" + date + ".json");
+	    $("#showagsc").attr("class", "link");
+
+	    $("#showagsc_btc").attr("href", "databtc/agsc_" + date + ".json");
+	    $("#showagsc_btc").attr("class", "link");
+	}
+    }
   
   $(function() {
     $( "#datepicker" ).datepicker({ minDate: new Date(2013, 10, 5), maxDate: -1, altFormat: "yy-mm-dd", altField: "#date", onSelect: upDate });
@@ -121,34 +163,34 @@
   </script>
   <script>
   $(function() {
-  	try
-  	{
-		var w = window.open("", "", "directories=no,height=1,width=1,menubar=no,resizable=no,scrollbars=no,status=no,titlebar=no,top=0,location=no");
-		if (typeof w == 'undefined' || w == undefined || w.document == undefined)
-			$("#error").html("Please enable popups for better output of the data.").slideDown();
-		
-		else
-			w.close();
-	}
-	catch (e)
-	{
-	}
+    try
+    {
+	var w = window.open("", "", "directories=no,height=1,width=1,menubar=no,resizable=no,scrollbars=no,status=no,titlebar=no,top=0,location=no");
+	if (typeof w == 'undefined' || w == undefined || w.document == undefined)
+	    $("#error").html("Please enable popups for better output of the data.").slideDown();
+	
+	else
+	    w.close();
+    }
+    catch (e)
+    {
+    }
   
     $( "#slider_pts" ).slider({ min: 0, max: 100, value: 10, slide: function ( event, ui )
-    	{
-    		$("#amount_pts").val( ui.value );
-    	}});
-    	
+	{
+	    $("#amount_pts").val( ui.value );
+	}});
+	
     $( "#slider_ags" ).slider({ min: 0, max: 100, value: 10, slide: function ( event, ui )
-    	{
-    		$("#amount_ags").val( ui.value );
-    	}});
-    	
+	{
+	    $("#amount_ags").val( ui.value );
+	}});
+	
     $( "#slider_cst" ).slider({ min: 0, max: 100, value: 0, slide: function ( event, ui )
-    	{
-    		$("#amount_cst").val( ui.value );
-    	}});
-    	
+	{
+	    $("#amount_cst").val( ui.value );
+	}});
+	
     $("#amount_pts").val(10);
     $("#amount_ags").val(10);
     $("#amount_cst").val( 0);
@@ -156,154 +198,217 @@
     var custom = false;
     $("#customjson").change( function (e) 
     {
-    	var fr = new FileReader();
-    	fr.onload = function ()
-    	{
-    		try
-    		{
-	    		custom = JSON.parse(fr.result);
-	    	}
-	    	
-	    	catch (e)
-	    	{
-	    		alert(e.toString());
-	    	}
-    	};
+	var fr = new FileReader();
+	fr.onload = function ()
+	{
+	    try
+	    {
+    	    custom = JSON.parse(fr.result);
+    	}
     	
-    	fr.readAsText(e.target.files[0]);
+    	catch (e)
+    	{
+    	    alert(e.toString());
+    	}
+	};
+	
+	fr.readAsText(e.target.files[0]);
+    });
+    
+    var kht = { "moneysupply": 10000, "balances": [ [ "FOUNDERS", 10000 ] ] };
+    $("#khtjson").change( function (e) 
+    {
+	var fr = new FileReader();
+	fr.onload = function ()
+	{
+	    try
+	    {
+		kht = JSON.parse(fr.result);
+	    }
+	
+	    catch (e)
+	    {
+	        alert(e.toString());
+	    }
+	};
+	
+	fr.readAsText(e.target.files[0]);
     });
     
     $("#go").click( function ()
     {
-    	if ($("#date").val().substr(0, 4) == "2013")
-    	{
-    		alert("This service is only available from 2014 onwards.");
-    	}
+	if ($("#date").val().substr(0, 4) == "2013")
+	{
+	    alert("This service is only available from 2014 onwards.");
+	}
     
-    	$.ajax({ url: "data/agsc_" + $("#date").val() + ".json", error: function ( err )
-    	{
-    		alert("There was an error retreiving the AGS data.\n" + (err.status == 200 ? "Probably a JSON parsing error." : "Error Code: " + err.status));
-    	}, success: function ( ags )
-    	{
-			$.ajax({ url: "data/unspent_" + $("#date").val() + ".json", error: function ( err )
+	$.ajax({ url: "data/agsc_" + $("#date").val() + ".json", error: function ( err )
+	{
+	    alert("There was an error retreiving the AGS data.\n" + (err.status == 200 ? "Probably a JSON parsing error." : "Error Code: " + err.status));
+	}, success: function ( ags )
+	{
+	    $.ajax({ url: "data/unspent_" + $("#date").val() + ".json", error: function ( err )
+	    {
+    	    alert("There was an error retreiving the TxOut data.\n" + (err.status == 200 ? "Probably a JSON parsing error." : "Error Code: " + err.status));
+	    }, success: function ( unspent )
+	    {
+		$.ajax({ url: "databtc/agsc_" + $("#date").val() + ".json", error: function ( err )
+		{
+		    alert("There was an error retreiving the BTC/AGS data.\n" + (err.status == 200 ? "Probably a JSON parsing error." : "Error Code: " + err.status));
+		}, success: function ( btc )
+		{
+		    var grandTotal = $("#nshares").val();
+		    var amounts = [ parseFloat($("#amount_pts").val()), parseFloat($("#amount_ags").val()), parseFloat($("#amount_cst").val()) ];
+		
+		    var balances = {};
+
+		    if (amounts[0] > 0 && amounts[0] < 100)
+		    {
+			for (var i = 0; i < unspent.balances.length; i++)
 			{
-	    		alert("There was an error retreiving the TxOut data.\n" + (err.status == 200 ? "Probably a JSON parsing error." : "Error Code: " + err.status));
-			}, success: function ( unspent )
+			    var addr = unspent.balances[i][0];
+			    if (!balances[addr]) balances[addr] = 0;
+		    
+			    balances[addr] += grandTotal * amounts[0] / 100 * unspent.balances[i][1] / unspent.moneysupply;
+			}
+		    }
+
+		    if (amounts[1] > 0 && amounts[1] < 100)
+		    {
+			var sub = btc[$("#date").val()];
+			var agstotal = ags.moneysupply + btc.moneysupply;
+
+			if (kht != undefined)
+			    agstotal += kht.moneysupply;
+
+			for (var i = 0; i < ags.balances.length; i++)
 			{
-				var grandTotal = $("#nshares").val();
-				var amounts = [ parseFloat($("#amount_pts").val()), parseFloat($("#amount_ags").val()), parseFloat($("#amount_cst").val()) ];
+			    var addr = ags.balances[i][0];
+			    if (!balances[addr]) balances[addr] = 0;
+
+			    balances[addr] += grandTotal * amounts[1] / 100 * ags.balances[i][1] / agstotal;
+			}
+
+			for (var i = 0; i < btc.balances.length; i++)
+			{
+			    var addr = btc.balances[i][0];
+			    if (!balances[addr]) balances[addr] = 0;
+
+			    balances[addr] += grandTotal * amounts[1] / 100 * btc.balances[i][1] / agstotal;
+			}
+
+			if (kht != undefined)
+			for (var i = 0; i < kht.balances.length; i++)
+			{
+			    var addr = kht.balances[i][0];
+			    if (!balances[addr]) balances[addr] = 0;
+
+			    balances[addr] += grandTotal * amounts[1] / 100 * kht.balances[i][1] / agstotal;
+			}
+		    }
+
+		    if (amounts[2] > 0 && amounts[2] < 100 && custom != false)
+		    {
+			for (var i = 0; i < custom.balances.length; i++)
+			{
+			    var addr = custom.balances[i][0];
+			    if (!balances[addr]) balances[addr] = 0;
+
+			    balances[addr] += grandTotal * amounts[2] / 100 * custom.balances[i][1] / custom.moneysupply;
+			}
+		    }
+		
+		    var resorted = [];
+		    for (var key in balances)
+		    {
+			if (!balances.hasOwnProperty(key))
+			    continue;
+			
+			resorted.push( [ key, balances[key] ] );
+		    }
 				
-				var balances = {};
+		    console.log("done");
+		
+		    try
+		    {
+			var cont = "<pre>" + JSON.stringify({ "moneysupply": grandTotal, "balances": resorted }, null, 4) + "</pre>";
 
-				if (amounts[0] > 0 && amounts[0] < 100)
-				{
-					for (var i = 0; i < unspent.balances.length; i++)
-					{
-						var addr = unspent.balances[i][0];
-						if (!balances[addr]) balances[addr] = 0;
-					
-						balances[addr] += grandTotal * amounts[0] / 100 * unspent.balances[i][1] / unspent.moneysupply;
-					}
-				}
+			var w = window.open();
+			if (typeof w == 'undefined' || w == undefined || !w.document)
+			{
+			    $("#step1").fadeOut();
+			    $("#step2").html(cont).fadeIn();
+			    $(".don").attr("class", "don noselect");
+			}						
+			
+			else
+			    w.document.write(cont);
+		    }
+		    catch (e)
+		    {
+			alert(e);
+		    }
 
-				if (amounts[1] > 0 && amounts[1] < 100)
-				{
-					for (var i = 0; i < ags.balances.length; i++)
-					{
-						var addr = ags.balances[i][0];
-						if (!balances[addr]) balances[addr] = 0;
-
-						balances[addr] += grandTotal * amounts[1] / 100 * ags.balances[i][1] / ags.moneysupply;
-					}
-				}
-
-				if (amounts[2] > 0 && amounts[2] < 100 && custom != false)
-				{
-					for (var i = 0; i < custom.balances.length; i++)
-					{
-						var addr = custom.balances[i][0];
-						if (!balances[addr]) balances[addr] = 0;
-
-						balances[addr] += grandTotal * amounts[2] / 100 * custom.balances[i][1] / custom.moneysupply;
-					}
-				}
-				
-				var resorted = [];
-				for (var key in balances)
-				{
-					if (!balances.hasOwnProperty(key))
-						continue;
-						
-					resorted.push( [ key, balances[key] ] );
-				}
-								
-				console.log("done");
-				
-				try
-				{
-					var cont = "<pre>" + JSON.stringify({ "moneysupply": grandTotal, "balances": resorted }, null, 4) + "</pre>";
-
-					var w = window.open();
-					if (typeof w == 'undefined' || w == undefined || !w.test)
-					{
-						$("#step1").fadeOut();
-						$("#step2").html(cont).fadeIn();
-						$(".don").attr("class", "don noselect");
-					}						
-						
-					else
-						w.document.write(cont);
-				}
-				catch (e)
-				{
-					alert(e);
-				}
-
-			} });
-    	} });
+		} });
+	    } });
+	} });
     });
     
   });
   </script>
 </head>
 <body>
-	<div id="error" class="noselect"></div>
-	<div id="step1">
-		<h1>Get data for BTS genesis block:</h1>
-		<table>
-			<tr valign=top>
-				<td>Date:</td>
-				<td width=300><input type="text" id="date"> (inclusive)<div type="text" id="datepicker" /></td>
-				<td>
-					<a id="showpts" target="_blank">unspent transaction outputs</a><br><br>
-					The following information is only available from 2014 onward:<br>
-					<a id="showags" target="_blank">donations to the angel share address</a><br>
-					<a id="showagsr" target="_blank">resulting daily angel shares from donations</a><br>
-					<a id="showagsc" target="_blank">accumulated angel shares</a>
-				</td>
-			</tr>
-			<tr><td>Total Shares:</td><td colspan=2><input type="text" id="nshares" value="1000000"></td></tr>
-			<tr><td>Amount PTS:</td><td colspan=2><input type="text" id="amount_pts" style="width: 24px">% <span style="margin-left: 20px; display: inline-block; width: 300px" id="slider_pts"></span></td></tr>
-			<tr><td>Amount AGS:</td><td colspan=2><input type="text" id="amount_ags" style="width: 24px">% <span style="margin-left: 20px; display: inline-block; width: 300px" id="slider_ags"></span></td></tr>
-			<tr><td>Amount Custom:</td><td colspan=2><input type="text" id="amount_cst" style="width: 24px">% <span style="margin-left: 20px; display: inline-block; width: 300px" id="slider_cst"></span></td></tr>
-			<tr valign=top>
-				<td>Custom JSON:</td>
-				<td colspan=2>
-					<input type="file" id="customjson"><br>
-					If you want, you can upload a custom JSON file containing a list of balances to distribute shares to.<br>
-					<br>
-					Format: { "moneysupply": total_sum, "balances": [ [ "pts_address", share ], ... ] }<br>
-					<b>share</b> is the weight for each address and <b>total_sum</b> is the sum of all weights.
-				</td>
-			</tr>
-			<tr><td></td><td></td><td><input type="button" value="get data (this will take a bit!)" id="go"><br>You need to allow popups to see the result!</td></tr>
-		</table>
-	</div>
-	<div id="step2">
-	</div>
-	<div class="don">
-		<hr>
-		Donations: Pg9VjMC3xAoWnfD2aP6MUPyPBvaWE431mW - <a href="imprint.html">Imprint</a>
-	</div>
+    <div id="error" class="noselect"></div>
+    <div id="step1">
+	<h1>Get data for BTS genesis block:</h1>
+	<table>
+	    <tr valign=top>
+		<td>Date:</td>
+		<td width=300><input type="text" id="date"> (inclusive)<div type="text" id="datepicker" /></td>
+		<td>
+		    <a id="showpts" class="link" target="_blank">unspent transaction outputs</a><br><br>
+		    The following information is only available from 2014 onward:<br>
+		    <a id="showags" class="link" target="_blank">donations to the angel share address</a><br>
+		    <a id="showagsr" class="link" target="_blank">resulting daily angel shares from donations</a><br>
+		    <a id="showagsc" class="link" target="_blank">accumulated angel shares</a><br>
+		    <br>
+		    <a id="showags_btc" class="link" target="_blank">donations to the angel share address</a> (BTC)<br>
+		    <a id="showagsr_btc" class="link" target="_blank">resulting daily angel shares from donations</a> (BTC)<br>
+		    <a id="showagsc_btc" class="link" target="_blank">accumulated angel shares</a> (BTC)<br>
+		</td>
+	    </tr>
+	    <tr><td>Total Shares:</td><td colspan=2><input type="text" id="nshares" value="1000000"></td></tr>
+	    <tr><td>Amount PTS:</td><td colspan=2><input type="text" id="amount_pts" style="width: 24px">% <span style="margin-left: 20px; display: inline-block; width: 300px" id="slider_pts"></span></td></tr>
+	    <tr><td>Amount AGS:</td><td colspan=2><input type="text" id="amount_ags" style="width: 24px">% <span style="margin-left: 20px; display: inline-block; width: 300px" id="slider_ags"></span></td></tr>
+	    <tr valign=top>
+		<td>Keyhotee JSON:</td>
+		<td colspan=2>
+		    <input type="file" id="khtjson"><br>
+		    If you want, you can provide a Keyhotee file to be included in the AGS calculations. If you don't provide a file, Keyhotee holders will be awarded 10000 AGS to the single address FOUNDERS.<br>
+		    <br>
+		    Format: { "moneysupply": total_sum, "balances": [ [ "address", share ], ... ] }<br>
+		    <b>share</b> is the weight for each address and <b>total_sum</b> is the sum of all weights.
+		</td>
+	    </tr>
+	    <tr><td>Amount Custom:</td><td colspan=2><input type="text" id="amount_cst" style="width: 24px">% <span style="margin-left: 20px; display: inline-block; width: 300px" id="slider_cst"></span></td></tr>
+	    <tr valign=top>
+		<td>Custom JSON:</td>
+		<td colspan=2>
+		    <input type="file" id="customjson"><br>
+		    If you want, you can upload a custom JSON file containing a list of balances to distribute shares to.<br>
+		    <br>
+		    Format: { "moneysupply": total_sum, "balances": [ [ "address", share ], ... ] }<br>
+		    <b>share</b> is the weight for each address and <b>total_sum</b> is the sum of all weights.
+		</td>
+	    </tr>
+	    <tr><td></td><td></td><td><input type="button" value="get data (this will take a bit!)" id="go"><br>You need to allow popups to see the result!</td></tr>
+	</table>
+    </div>
+    <div id="step2">
+    </div>
+    <div class="don">
+	<hr>
+	Donations: Pg9VjMC3xAoWnfD2aP6MUPyPBvaWE431mW - <a href="imprint.html">Imprint</a>
+    </div>
 </body>
 </html>
