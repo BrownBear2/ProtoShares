@@ -26,7 +26,7 @@
 	cd ..
 
 	echo "download bitcoin source code"
-	git clone https://github.com/BrownBear2/bitcoin.git	
+	git clone https://github.com/InvictusInnovations/bitcoin.git
 	
 	echo "compile bitcoin"
 	cd bitcoin
