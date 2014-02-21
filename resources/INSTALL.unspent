@@ -43,7 +43,7 @@
 	
 	echo "run bitcoind"
 	mkdir databtc
-	./bitcoin/src/bitcoind -unspent=databtc &
+	./bitcoin/src/bitcoind -reindex -disablewallet -unspent=databtc &
 	
 	echo "moving index.html to index.html.old and create symbolic links for nginx"
 	sleep 5
