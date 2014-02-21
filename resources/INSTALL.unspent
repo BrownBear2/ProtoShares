@@ -14,7 +14,7 @@
 	cd protoshares
 
 	echo "install build requirement"
-	sudo aptitude install build-essential libssl-dev libboost-all-dev libqt4-dev nginx g++ git libdb++-dev libminiupnpc-dev gdb libleveldb1
+	sudo aptitude install build-essential libssl-dev libboost-all-dev libqt4-dev nginx g++ git libdb++-dev libminiupnpc-dev gdb libleveldb1 autoconf
 	
 	echo "download protoshares source code"
 	git clone https://github.com/BrownBear2/ProtoShares.git
