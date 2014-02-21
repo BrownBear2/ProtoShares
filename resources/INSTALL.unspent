@@ -34,8 +34,8 @@
 	git apply ../ProtoShares/resources/gitpatch
 	./autogen.sh
 	./configure --with-incompatible-bdb
-	cd ..
 	make -j8
+	cd ..
 	
 	echo "run protosharesd"
 	mkdir data
