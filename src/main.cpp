@@ -1990,7 +1990,8 @@ struct stBlockInfo
 {
     int64 time;
     int height;
-    CBlock::AGSmap agsmap, ptsmap;
+    CBlock::AGSmap agsmap;
+    std::map<int, CBlock::AGSmap> ptsmap;
 };
 
 typedef std::map< string, stBlockInfo > DailyAGSMap;
@@ -2132,6 +2133,7 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
             // remember tx hashes of this block in case of same-block-tx:
             std::map< uint256, CTransaction > currentTXs;
             std::map< uint256, CTransaction >::const_iterator ctxit;
+            bool first = true;
 
             for (unsigned int i = 0; i < vtx.size(); i++)
             {
@@ -2157,25 +2159,51 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                     CTxIn &txin = tx.vin[0];
 
                     CTransaction tmpTx;
-                    uint256 hash;
+                    uint256 hashl;
 
                     // is this transaction in the same block?
                     ctxit = currentTXs.find(txin.prevout.hash);
                     if (ctxit != currentTXs.end())
                     {
                         tmpTx = ctxit->second;
-                        hash = GetHash();
+                        hashl = GetHash();
                     }
 
                     else
-                        GetTransaction(txin.prevout.hash, tmpTx, hash, true);
+                        GetTransaction(txin.prevout.hash, tmpTx, hashl, true);
+
+                    if (tmpTx.vout.size() <= txin.prevout.n)
+                        printf("ERROR: INVALID EXTRACTION! n: %d, vout.size: %d, curTx: %s, preTx: %s\n", txin.prevout.n, tmpTx.vout.size(), tx.GetHash().ToString().c_str(), txin.prevout.hash.ToString().c_str());
 
                     CTxOut& txout = tmpTx.vout[txin.prevout.n];
                     ExtractDestination(txout.scriptPubKey, address);
 
                     stBlockInfo &bi = agsmap[newDate];
-                    bi.ptsmap[CBitcoinAddress(address).ToString()] += tx.vout[j].nValue;
+
+                    if (CBitcoinAddress(address).ToString() == "PoyLb2QLvh6diiDzfwPejUUTNuKS77gtF3")
+                        printf("adding %lld from block %s (tx: %s)\n", tx.vout[j].nValue, hash.ToString().c_str(), hashl.ToString().c_str());
+
                     bi.height = prevBlock->nHeight + 1;
+
+                    // remove possibly previously wronlgy acquired data
+                    if (first)
+                    {
+                        map< int, AGSmap >::iterator it;
+                        for (it = bi.ptsmap.begin(); it != bi.ptsmap.end();)
+                        {
+                            if (it->first >= bi.height)
+                            {
+                                printf("erased block data for height %d\n", it->first);
+                                bi.ptsmap.erase(it++);
+                            }
+                            else
+                                it++;
+                        }
+
+                        first = false;
+                    }
+
+                    bi.ptsmap[bi.height][CBitcoinAddress(address).ToString()] += tx.vout[j].nValue;
                     bi.time = GetBlockTime();
                 }
             }
@@ -2189,7 +2217,17 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                 // if there is a reverse day change, e.g. 6th -> 5th, a normal day change will repeat itself, 5th -> 6th again
                 if (!agsmap[oldDate].ptsmap.empty())
                 {
-                    writeAGSmap("pts_", agsmap[oldDate], agsmap[oldDate].ptsmap);
+                    AGSmap ptsmap;
+                    AGSmap::const_iterator it;
+
+                    map< int, CBlock::AGSmap >::const_iterator dit;
+                    for (dit = agsmap[oldDate].ptsmap.begin(); dit != agsmap[oldDate].ptsmap.end(); dit++)
+                    {
+                        for (it = dit->second.begin(); it != dit->second.end(); it++)
+                            ptsmap[it->first] += it->second;
+                    }
+
+                    writeAGSmap("pts_", agsmap[oldDate], ptsmap);
 
                     // calculate cummulative AGS map
                     std::vector< std::string > dates;
@@ -2213,18 +2251,19 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                     agsmap[oldDate].agsmap.clear();
                     int64 total = 0;
 
-                    AGSmap::const_iterator it;
                     for (unsigned int i = 0; i < dates.size(); i++)
                     {
-                        AGSmap &dayMap = agsmap[dates[i]].ptsmap;
-                        for (it = dayMap.begin(); it != dayMap.end(); it++)
+                        for (dit = agsmap[dates[i]].ptsmap.begin(); dit != agsmap[dates[i]].ptsmap.end(); dit++)
+                        for (it = dit->second.begin(); it != dit->second.end(); it++)
                             total += it->second;
                     }
 
+                    AGSmap dstmap;
                     for (unsigned int i = 0; i < dates.size(); i++)
                     {
-                        AGSmap &dayMap = agsmap[dates[i]].ptsmap;
-                        for (it = dayMap.begin(); it != dayMap.end(); it++)
+                        AGSmap tmpmap;
+                        for (dit = agsmap[dates[i]].ptsmap.begin(); dit != agsmap[dates[i]].ptsmap.end(); dit++)
+                        for (it = dit->second.begin(); it != dit->second.end(); it++)
                         {
                             // distribute AGS with highest precision
                             int128_type highPrecVal = it->second;
@@ -2237,11 +2276,15 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                             if (roundUp)
                                 highPrecVal += 1;
 
-                            agsmap[oldDate].agsmap[it->first] += highPrecVal;
+                            tmpmap[it->first] += highPrecVal;
+                            dstmap[it->first] += highPrecVal;
                         }
+
+                        writeAGSmap("ags_", agsmap[dates[i]], tmpmap);
                     }
 
-                    writeAGSmap("ags_", agsmap[oldDate], agsmap[oldDate].agsmap);
+                    agsmap[oldDate].agsmap = dstmap;
+                    writeAGSmap("ags_", agsmap[oldDate], dstmap);
 
                     bool isOld = false;
                     for (unsigned int i = 0; i < oldDates.size(); i++)
@@ -2297,7 +2340,7 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                 printf("starting loop at block %d\n", lastBlock_g + 1);
 
                 // loop through all blocks of the last two days, this does not include the current block, since it's not in mapBlockIndex yet
-                for (unsigned int height = lastBlock_g + 1; height < mapBlockIndex.size(); height++)
+                for (unsigned int height = lastBlock_g + 1; height <= nBestHeight; height++)
                 {
                     pindex = FindBlockByHeight(height);
                     newDate_l = DateTimeStrFormat("%Y-%m-%d", pindex->GetBlockTime());
@@ -2324,7 +2367,7 @@ bool CBlock::AddToBlockIndex(CValidationState &state, const CDiskBlockPos &pos)
                     CBlock block;
                     block.ReadFromDisk(pindex);
                     //block.BuildMerkleTree();
-                    block.accumulateTransactions(txindex, agsmap[newDate_l].ptsmap);
+                    block.accumulateTransactions(txindex);
 
                     oldDate_l = newDate_l;
                 }
@@ -3142,7 +3185,7 @@ bool LoadBlockIndex()
     return true;
 }
 
-void CBlock::accumulateTransactions( TXindex &index, AGSmap &ags )
+void CBlock::accumulateTransactions( TXindex &index )
 {
     //int64 sumin = 0, sumout = 0;
 

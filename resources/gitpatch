@@ -17,7 +17,7 @@ index e61cad9..c7781fe 100644
      static uint256 CheckMerkleBranch(uint256 hash, const std::vector<uint256>& vMerkleBranch, int nIndex);
      void print() const;
 diff --git a/src/main.cpp b/src/main.cpp
-index 8e879c3..c3e313a 100644
+index 8e879c3..4b6cf6d 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -14,6 +14,7 @@
@@ -37,7 +37,7 @@ index 8e879c3..c3e313a 100644
              return false;
          }
      }
-@@ -2019,6 +2020,348 @@ bool ActivateBestChain(CValidationState &state) {
+@@ -2019,6 +2020,376 @@ bool ActivateBestChain(CValidationState &state) {
      return true;
  }
  
@@ -46,7 +46,8 @@ index 8e879c3..c3e313a 100644
 +{
 +    int64_t time;
 +    int height;
-+    CBlock::AGSPTSmap agsmap;
++    CBlock::AGSmap agsmap;
++    std::map< int, CBlock::AGSmap > ptsmap;
 +};
 +
 +typedef std::map< string, stBlockInfo > DailyAGSMap;
@@ -66,15 +67,16 @@ index 8e879c3..c3e313a 100644
 +
 +#define DIV_BY_COIN( bigNumber ) INT_BY_COIN( bigNumber ), (((bigNumber) < 0) ? -1 : 1) * DEC_BY_COIN( bigNumber )
 +
-+void writeAGSmap(std::string prefix, stBlockInfo &lastBlock)
++void writeAGSmap(std::string prefix, stBlockInfo &lastBlock, CBlock::AGSmap &agsmap)
 +{
 +    std::string day = DateTimeStrFormat("%Y-%m-%d", lastBlock.time);
 +    setlocale(LC_NUMERIC, "C");
 +
 +    int64_t total = 0;
-+    CBlock::AGSPTSmap::const_iterator it;
-+    for (it = lastBlock.agsmap.begin(); it != lastBlock.agsmap.end(); it++)
-+        total += (prefix == "ags_") ? it->second.first : it->second.second;
++    
++    CBlock::AGSmap::const_iterator it;
++    for (it = agsmap.begin(); it != agsmap.end(); it++)
++        total += it->second;
 +
 +	std::string fn = "databtc/" + prefix + day + ".json";
 +    printf("writing ags data to %s\n", fn.c_str());
@@ -86,7 +88,7 @@ index 8e879c3..c3e313a 100644
 +
 +    bool first = true;
 +
-+    for (it = lastBlock.agsmap.begin(); it != lastBlock.agsmap.end(); it++)
++    for (it = agsmap.begin(); it != agsmap.end(); it++)
 +    {
 +        if (first)
 +            first = false;
@@ -94,7 +96,7 @@ index 8e879c3..c3e313a 100644
 +        else
 +            fprintf(fh, ",");
 +
-+        fprintf(fh, "\n\t\t[ \"%s\", "DBCS" ]", it->first.c_str(), DIV_BY_COIN((prefix == "ags_") ? it->second.first : it->second.second));
++        fprintf(fh, "\n\t\t[ \"%s\", "DBCS" ]", it->first.c_str(), DIV_BY_COIN(it->second));
 +    }
 +
 +    fprintf(fh, "\n\n\t]\n}\n");
@@ -220,6 +222,7 @@ index 8e879c3..c3e313a 100644
 +            // remember tx hashes of this block in case of same-block-tx:
 +            std::map< uint256, CTransaction > currentTXs;
 +            std::map< uint256, CTransaction >::const_iterator ctxit;
++            bool first = true;
 +
 +            for (unsigned int i = 0; i < vtx.size(); i++)
 +            {
@@ -245,25 +248,47 @@ index 8e879c3..c3e313a 100644
 +                    CTxIn &txin = tx.vin[0];
 +
 +                    CTransaction tmpTx;
-+                    uint256 hash;
++                    uint256 hashl;
 +
 +                    // is this transaction in the same block?
 +                    ctxit = currentTXs.find(txin.prevout.hash);
 +                    if (ctxit != currentTXs.end())
 +                    {
 +                        tmpTx = ctxit->second;
-+                        hash = GetHash();
++                        hashl = GetHash();
 +                    }
 +
 +                    else
-+                        GetTransaction(txin.prevout.hash, tmpTx, hash, true);
++                        GetTransaction(txin.prevout.hash, tmpTx, hashl, true);
 +
-+                    CTxOut& txout = tmpTx.vout[txin.prevout.n];
++                    if (tmpTx.vout.size() <= txin.prevout.n)
++                        printf("ERROR: INVALID EXTRACTION! n: %d, vout.size: %d, curTx: %s, preTx: %s\n", txin.prevout.n, tmpTx.vout.size(), tx.GetHash().ToString().c_str(), txin.prevout.hash.ToString().c_str());
++
++                     CTxOut& txout = tmpTx.vout[txin.prevout.n];
 +                    ExtractDestination(txout.scriptPubKey, address);
 +
 +                    stBlockInfo &bi = agsmap[newDate];
-+                    bi.agsmap[CBitcoinAddress(address).ToString()].second += tx.vout[j].nValue;
 +                    bi.height = prevBlock->nHeight + 1;
++
++                    // remove possibly previously wronlgy acquired data
++                    if (first)
++                    {
++                        map< int, AGSmap >::iterator it;
++                        for (it = bi.ptsmap.begin(); it != bi.ptsmap.end();)
++                        {
++                            if (it->first >= bi.height)
++                            {
++                                printf("erased block data for height %d\n", it->first);
++                                bi.ptsmap.erase(it++);
++                            }
++                            else
++                                it++;
++                        }
++
++                        first = false;
++                    }
++
++                    bi.ptsmap[bi.height][CBitcoinAddress(address).ToString()] += tx.vout[j].nValue;
 +                    bi.time = GetBlockTime();
 +                }
 +            }
@@ -275,15 +300,19 @@ index 8e879c3..c3e313a 100644
 +                // in case we have a day change, save the updated ags map
 +                // if it's a normal day change, e.g. 5th -> 6th, save the oldDate map
 +                // if there is a reverse day change, e.g. 6th -> 5th, a normal day change will repeat itself, 5th -> 6th again
-+                if (!agsmap[oldDate].agsmap.empty())
++                if (!agsmap[oldDate].ptsmap.empty())
 +                {
-+                    // clear 2 day old map to save memory (only after 2014-01-02)
-+/*                    if (oldDate != "2014-01-01" && oldDate.substr(0, 4) != "2013")
++                    AGSmap ptsmap;
++                    AGSmap::const_iterator it;
++
++                    map< int, CBlock::AGSmap >::const_iterator dit;
++                    for (dit = agsmap[oldDate].ptsmap.begin(); dit != agsmap[oldDate].ptsmap.end(); dit++)
 +                    {
-+                        agsmap[DateTimeStrFormat("%Y-%m-%d", GetBlockTime() - 86400 * 2)].ptsmap.clear();
++                        for (it = dit->second.begin(); it != dit->second.end(); it++)
++                            ptsmap[it->first] += it->second;
 +                    }
-+  */
-+                    writeAGSmap("pts_", agsmap[oldDate]);
++
++                    writeAGSmap("pts_", agsmap[oldDate], ptsmap);
 +
 +                    // calculate cummulative AGS map
 +                    std::vector< std::string > dates;
@@ -306,25 +335,23 @@ index 8e879c3..c3e313a 100644
 +
 +                    int64_t total = 0;
 +
-+                    AGSPTSmap::iterator it;
 +                    for (unsigned int i = 0; i < dates.size(); i++)
 +                    {
-+                        AGSPTSmap &dayMap = agsmap[dates[i]].agsmap;
-+                        for (it = dayMap.begin(); it != dayMap.end(); it++)
-+                        {
-+                            it->second.first = 0;
-+                            total += it->second.second; // PTS
-+                        }
++                        for (dit = agsmap[dates[i]].ptsmap.begin(); dit != agsmap[dates[i]].ptsmap.end(); dit++)
++                        for (it = dit->second.begin(); it != dit->second.end(); it++)
++                            total += it->second; // BTC
 +                    }
 +
-+                    AGSPTSmap &dstMap = agsmap[oldDate].agsmap;
++                    AGSmap dstMap;
 +                    for (unsigned int i = 0; i < dates.size(); i++)
 +                    {
-+                        AGSPTSmap &dayMap = agsmap[dates[i]].agsmap;
-+                        for (it = dayMap.begin(); it != dayMap.end(); it++)
++                        CBlock::AGSmap tmpmap;
++
++                        for (dit = agsmap[dates[i]].ptsmap.begin(); dit != agsmap[dates[i]].ptsmap.end(); dit++)
++                        for (it = dit->second.begin(); it != dit->second.end(); it++)
 +                        {
 +                            // distribute AGS with highest precision
-+                            int128_type highPrecVal = it->second.second;
++                            int128_type highPrecVal = it->second;
 +                            highPrecVal *= 5000 * COIN * 10;
 +                            highPrecVal /= total;
 +
@@ -333,15 +360,16 @@ index 8e879c3..c3e313a 100644
 +
 +                            if (roundUp)
 +                                highPrecVal += 1;
-+                                
-+                            if (dates[i] != oldDate)
-+	                            it->second.first += highPrecVal;
-+	                            
-+	                        dstMap[it->first].first += highPrecVal;
++
++                            tmpmap[it->first] += highPrecVal;
++                            dstMap[it->first] += highPrecVal;
 +                        }
++
++                        writeAGSmap("ags_", agsmap[dates[i]], tmpmap);
 +                    }
 +
-+                    writeAGSmap("ags_", agsmap[oldDate]);
++                    agsmap[oldDate].agsmap = dstMap;
++                    writeAGSmap("ags_", agsmap[oldDate], dstMap);
 +
 +                    bool isOld = false;
 +                    for (unsigned int i = 0; i < oldDates.size(); i++)
@@ -355,11 +383,11 @@ index 8e879c3..c3e313a 100644
 +                        AGSmap cummulativeAGS;
 +                        while (thatDay != "2013-12-31")
 +                        {
-+                            AGSPTSmap::const_iterator it;
-+                            AGSPTSmap &dayMap = agsmap[thatDay].agsmap;
++                            AGSmap::const_iterator it;
++                            AGSmap &dayMap = agsmap[thatDay].agsmap;
 +
 +                            for (it = dayMap.begin(); it != dayMap.end(); it++)
-+                                cummulativeAGS[it->first] += it->second.first;
++                                cummulativeAGS[it->first] += it->second;
 +
 +                            oldTime -= 86400; // one day back
 +                            thatDay = DateTimeStrFormat("%Y-%m-%d", oldTime);
@@ -386,7 +414,7 @@ index 8e879c3..c3e313a 100644
  bool AddToBlockIndex(CBlock& block, CValidationState& state, const CDiskBlockPos& pos)
  {
      // Check for duplicate
-@@ -2026,6 +2369,9 @@ bool AddToBlockIndex(CBlock& block, CValidationState& state, const CDiskBlockPos
+@@ -2026,6 +2397,9 @@ bool AddToBlockIndex(CBlock& block, CValidationState& state, const CDiskBlockPos
      if (mapBlockIndex.count(hash))
          return state.Invalid(error("AddToBlockIndex() : %s already exists", hash.ToString()), 0, "duplicate");
  
@@ -396,7 +424,7 @@ index 8e879c3..c3e313a 100644
      // Construct new block index object
      CBlockIndex* pindexNew = new CBlockIndex(block);
      {
-@@ -2715,6 +3061,14 @@ bool static LoadBlockIndexDB()
+@@ -2715,6 +3089,14 @@ bool static LoadBlockIndexDB()
      BOOST_FOREACH(const PAIRTYPE(int, CBlockIndex*)& item, vSortedByHeight)
      {
          CBlockIndex* pindex = item.second;
