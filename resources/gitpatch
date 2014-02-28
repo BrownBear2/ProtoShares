@@ -17,7 +17,9 @@ index e61cad9..c7781fe 100644
      static uint256 CheckMerkleBranch(uint256 hash, const std::vector<uint256>& vMerkleBranch, int nIndex);
      void print() const;
 diff --git a/src/main.cpp b/src/main.cpp
-index 8e879c3..4b6cf6d 100644
+old mode 100644
+new mode 100755
+index 8e879c3..9ef0227
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -14,6 +14,7 @@
@@ -37,7 +39,18 @@ index 8e879c3..4b6cf6d 100644
              return false;
          }
      }
-@@ -2019,6 +2020,376 @@ bool ActivateBestChain(CValidationState &state) {
+@@ -1913,6 +1914,10 @@ bool static ConnectTip(CValidationState &state, CBlockIndex *pindexNew) {
+         mempool.removeConflicts(tx);
+     }
+     mempool.check(pcoinsTip);
++
++    if (block.hashPrevBlock != 0)
++        block.parseAGS();
++
+     // Update chainActive & related variables.
+     UpdateTip(pindexNew);
+     return true;
+@@ -2019,6 +2024,406 @@ bool ActivateBestChain(CValidationState &state) {
      return true;
  }
  
@@ -79,7 +92,7 @@ index 8e879c3..4b6cf6d 100644
 +        total += it->second;
 +
 +	std::string fn = "databtc/" + prefix + day + ".json";
-+    printf("writing ags data to %s\n", fn.c_str());
++    LogPrintf("writing ags data to %s\n", fn.c_str());
 +
 +	FILE *fh = fopen(fn.c_str(), "w+");
 +	::system(("chmod o+r " + fn).c_str());
@@ -115,7 +128,7 @@ index 8e879c3..4b6cf6d 100644
 +
 +
 +	std::string fn = "databtc/" + prefix + day + ".json";
-+    printf("writing ags data to %s\n", fn.c_str());
++    LogPrintf("writing ags data to %s\n", fn.c_str());
 +
 +	FILE *fh = fopen(fn.c_str(), "w+");
 +	::system(("chmod o+r " + fn).c_str());
@@ -214,15 +227,42 @@ index 8e879c3..4b6cf6d 100644
 +                maxDate = DateTimeStrFormat("%Y-%m-%d", prevBlock->GetBlockTime());
 +            }
 +
-+            std::string oldDate = DateTimeStrFormat("%Y-%m-%d", prevBlock->GetBlockTime());
-+            std::string newDate = DateTimeStrFormat("%Y-%m-%d", GetBlockTime());
++            const std::string oldDate = DateTimeStrFormat("%Y-%m-%d", prevBlock->GetBlockTime());
++            const std::string newDate = DateTimeStrFormat("%Y-%m-%d", GetBlockTime());
++
++            // remove possibly previously wronlgy acquired data
++            map< int, AGSmap >::iterator it;
++            for (it = agsmap[oldDate].ptsmap.begin(); it != agsmap[oldDate].ptsmap.end();)
++            {
++                if (it->first > prevBlock->nHeight)
++                {
++                    LogPrintf("erased block data for height %d (od)\n", it->first);
++                    agsmap[oldDate].ptsmap.erase(it++);
++                }
++                else
++                    it++;
++            }
++
++            if (newDate != oldDate)
++            {
++                map< int, AGSmap >::iterator it;
++                for (it = agsmap[newDate].ptsmap.begin(); it != agsmap[newDate].ptsmap.end();)
++                {
++                    if (it->first > prevBlock->nHeight)
++                    {
++                        LogPrintf("erased block data for height %d (nd)\n", it->first);
++                        agsmap[newDate].ptsmap.erase(it++);
++                    }
++                    else
++                        it++;
++                }
++            }
 +
 +            // it's a new day!
 +
 +            // remember tx hashes of this block in case of same-block-tx:
 +            std::map< uint256, CTransaction > currentTXs;
 +            std::map< uint256, CTransaction >::const_iterator ctxit;
-+            bool first = true;
 +
 +            for (unsigned int i = 0; i < vtx.size(); i++)
 +            {
@@ -241,7 +281,7 @@ index 8e879c3..4b6cf6d 100644
 +
 +                    if (tx.vin[0].prevout.IsNull())
 +                    {
-+                        printf("well this is weird! I got a coinbase vin.\n");
++                        LogPrintf("well this is weird! I got a coinbase vin.\n");
 +                        continue;
 +                    }
 +
@@ -258,36 +298,39 @@ index 8e879c3..4b6cf6d 100644
 +                        hashl = GetHash();
 +                    }
 +
-+                    else
-+                        GetTransaction(txin.prevout.hash, tmpTx, hashl, true);
++                    else if (!GetTransaction(txin.prevout.hash, tmpTx, hashl, true))
++                    {
++                        LogPrintf("Cannot find transaction, parsing block chain!\n");
++                        CBlock block;
++
++                        for (int height = 0; height < chainActive.Height(); height++)
++                        {
++                            CBlockIndex* pindexSlow = chainActive[height];
++                            if (ReadBlockFromDisk(block, pindexSlow)) 
++                            {
++                                BOOST_FOREACH(const CTransaction &tx, block.vtx) 
++                                {
++                                    if (tx.GetHash() != txin.prevout.hash)
++                                        continue;
++
++                                    LogPrintf("Found tx in height %d\n", height);
++                                    tmpTx = tx;
++                                    hashl = pindexSlow->GetBlockHash();
++                                    height = chainActive.Height();
++                                    break;
++                                }
++                            }
++                        }
++                    }
 +
 +                    if (tmpTx.vout.size() <= txin.prevout.n)
-+                        printf("ERROR: INVALID EXTRACTION! n: %d, vout.size: %d, curTx: %s, preTx: %s\n", txin.prevout.n, tmpTx.vout.size(), tx.GetHash().ToString().c_str(), txin.prevout.hash.ToString().c_str());
++                        LogPrintf("ERROR: INVALID EXTRACTION! n: %d, vout.size: %d, curTx: %s, preTx: %s, tmpTx: %s\n", txin.prevout.n, tmpTx.vout.size(), tx.GetHash().ToString().c_str(), txin.prevout.hash.ToString().c_str(), tmpTx.GetHash().ToString().c_str());
 +
-+                     CTxOut& txout = tmpTx.vout[txin.prevout.n];
++                    CTxOut& txout = tmpTx.vout[txin.prevout.n];
 +                    ExtractDestination(txout.scriptPubKey, address);
 +
 +                    stBlockInfo &bi = agsmap[newDate];
 +                    bi.height = prevBlock->nHeight + 1;
-+
-+                    // remove possibly previously wronlgy acquired data
-+                    if (first)
-+                    {
-+                        map< int, AGSmap >::iterator it;
-+                        for (it = bi.ptsmap.begin(); it != bi.ptsmap.end();)
-+                        {
-+                            if (it->first >= bi.height)
-+                            {
-+                                printf("erased block data for height %d\n", it->first);
-+                                bi.ptsmap.erase(it++);
-+                            }
-+                            else
-+                                it++;
-+                        }
-+
-+                        first = false;
-+                    }
-+
 +                    bi.ptsmap[bi.height][CBitcoinAddress(address).ToString()] += tx.vout[j].nValue;
 +                    bi.time = GetBlockTime();
 +                }
@@ -407,24 +450,14 @@ index 8e879c3..4b6cf6d 100644
 +    }
 +    catch (std::exception &e)
 +    {
-+        printf("whoops\n");
++        LogPrintf("whoops\n");
 +    }
 +}
 +
  bool AddToBlockIndex(CBlock& block, CValidationState& state, const CDiskBlockPos& pos)
  {
      // Check for duplicate
-@@ -2026,6 +2397,9 @@ bool AddToBlockIndex(CBlock& block, CValidationState& state, const CDiskBlockPos
-     if (mapBlockIndex.count(hash))
-         return state.Invalid(error("AddToBlockIndex() : %s already exists", hash.ToString()), 0, "duplicate");
- 
-+   if (block.hashPrevBlock != 0)
-+        block.parseAGS();
-+
-     // Construct new block index object
-     CBlockIndex* pindexNew = new CBlockIndex(block);
-     {
-@@ -2715,6 +3089,14 @@ bool static LoadBlockIndexDB()
+@@ -2715,6 +3120,14 @@ bool static LoadBlockIndexDB()
      BOOST_FOREACH(const PAIRTYPE(int, CBlockIndex*)& item, vSortedByHeight)
      {
          CBlockIndex* pindex = item.second;
